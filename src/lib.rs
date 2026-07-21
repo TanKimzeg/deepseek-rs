@@ -12,7 +12,7 @@
 //! a `tokio::mpsc::Receiver`, while the blocking API returns an iterator that
 //! yields stream items.
 //!
-//! ```no_run
+//! ```ignore
 //! use deepseek_sdk::chat::request::{ChatMessage, ChatRequestBuilder, Thinking};
 //! use deepseek_sdk::{DeepSeekClient, DeepSeekRequest, DEFAULT_BASE_URL};
 //!

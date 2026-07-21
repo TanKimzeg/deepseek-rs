@@ -38,7 +38,7 @@ pub mod request {
         #[builder(setter(each(name = "message", into)))]
         pub messages: Vec<BetaChatMessage>,
 
-        /// Possible values: [`deepseek-v4-flash`, `deepseek-v4-pro`]
+        /// Possible values: \[ `deepseek-v4-flash` , `deepseek-v4-pro` \]
         ///
         /// ID of the model to use.
         pub model: String,
@@ -86,7 +86,7 @@ pub mod request {
 
         /// If set, partial message deltas will be sent.
         /// Tokens will be sent as data-only server-sent events (SSE) as they become available,
-        /// with the stream terminated by a `data: [DONE]`` message.
+        /// with the stream terminated by a `data: [DONE]` message.
         #[builder(default)]
         #[serde(skip_serializing_if = "Option::is_none")]
         pub stream: Option<bool>,
