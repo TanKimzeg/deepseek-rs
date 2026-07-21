@@ -18,6 +18,19 @@ Add to `Cargo.toml`:
 deepseek-sdk = "0.2"
 ```
 
+By default all API modules are enabled. To compile only what you need:
+
+```toml
+deepseek-sdk = { version = "0.2", default-features = false, features = ["chat", "models"] }
+```
+
+| Feature | API | Enabled by default |
+|---------|-----|--------------------|
+| `chat` | Chat completions | Yes |
+| `completion` | FIM + Beta chat completions (implies `chat`) | Yes |
+| `models` | List models | Yes |
+| `balance` | Account balance | Yes |
+
 ## API Key
 
 Set your API key before running examples:
@@ -93,8 +106,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   .thinking(Thinking::disabled())
   .build()?;
 
- let mut stream = req.stream_blocking()?;
- for item in stream.by_ref() {
+ let stream = req.stream_blocking()?;
+ for item in stream {
   let chunk = item?;
   for choice in chunk.choices {
    if let Some(delta) = choice.delta.content {
@@ -168,6 +181,8 @@ All requests return `DeepSeekError` on failure, covering:
 - HTTP errors (`Http`)
 - Decode errors (`Decode`)
 - Transport failures (`Transport`)
+
+All public error enums are marked `#[non_exhaustive]` — new variants may be added without a breaking semver change.
 
 ## License
 
