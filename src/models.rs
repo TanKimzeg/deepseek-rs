@@ -9,7 +9,7 @@ use serde::Deserialize;
 /// Model list response.
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
 pub struct Models {
-    /// Possible values: [`list`]
+    /// Possible values: \[`list`\]
     pub object: String,
     pub data: Vec<ModelInfo>,
 }
@@ -20,7 +20,7 @@ pub struct ModelInfo {
     /// The model identifier, which can be referenced in the API endpoints.
     pub id: String,
 
-    /// Possible values: [model]
+    /// Possible values: \[`model`\]
     ///
     /// The object type, which is always "model".
     pub object: String,

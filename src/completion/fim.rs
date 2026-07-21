@@ -32,7 +32,7 @@ pub struct FIMCompletionRequest {
     #[serde(skip_serializing)]
     pub client: DeepSeekClient,
 
-    /// Possible values: [`deepseek-v4-pro`]
+    /// Possible values: \[`deepseek-v4-pro`\]
     ///
     /// ID of the model to use.
     pub model: String,
@@ -181,15 +181,6 @@ pub struct CompletionChoiceStream {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub logprobs: Option<Logprobs>,
 }
-/// ```text
-/// data: {"id":"fb50cff8-93f0-49ee-b6c7-2878bae940fa","choices":[{"text":"","index":0,"logprobs":null,"finish_reason":null}],"created":1779503544,"model":"deepseek-v4-flash","system_fingerprint":"fp_8b330d02d0_prod0820_fp8_kvcache_20260402","object":"text_completion"}
-/// data: {"id":"fb50cff8-93f0-49ee-b6c7-2878bae940fa","choices":[{"text":"18","index":0,"logprobs":{"tokens":["18"],"token_logprobs":[-3.5918827],"top_logprobs":[{"20":-2.850668,"3":-2.7995281}],"text_offset":[18]},"finish_reason":null}],"created":1779503544,"model":"deepseek-v4-flash","system_fingerprint":"fp_8b330d02d0_prod0820_fp8_kvcache_20260402","object":"text_completion"}
-/// data: {"id":"fb50cff8-93f0-49ee-b6c7-2878bae940fa","choices":[{"text":"-year","index":0,"logprobs":{"tokens":["-year"],"token_logprobs":[-0.95153236],"top_logprobs":[{"-year":-0.95153236," years":-1.1679096}],"text_offset":[20]},"finish_reason":null}],"created":1779503544,"model":"deepseek-v4-flash","system_fingerprint":"fp_8b330d02d0_prod0820_fp8_kvcache_20260402","object":"text_completion"}
-/// data: {"id":"fb50cff8-93f0-49ee-b6c7-2878bae940fa","choices":[{"text":"-old","index":0,"logprobs":{"tokens":["-old"],"token_logprobs":[-0.046930313],"top_logprobs":[{" old":-3.628458,"-old":-0.046930313}],"text_offset":[25]},"finish_reason":null}],"created":1779503544,"model":"deepseek-v4-flash","system_fingerprint":"fp_8b330d02d0_prod0820_fp8_kvcache_20260402","object":"text_completion"}
-/// ...
-/// data: [DONE]
-/// ```
-
 /// Streaming FIM completion response (SSE chunks).
 pub type CompletionStream = ChatGeneric<CompletionChoiceStream>;
 /// Stream item produced by FIM completion streaming.
