@@ -23,7 +23,7 @@ deepseek-sdk = "0.2"
 Set your API key before running examples:
 
 ```bash
-export DEEPSEEK_API="sk-..."
+export DEEPSEEK_API_KEY="sk-..."
 ```
 
 ## Quick Start (Chat)

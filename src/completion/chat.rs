@@ -420,7 +420,7 @@ mod tests {
 
     fn get_client() -> DeepSeekClient {
         DeepSeekClient::new(
-            std::env::var("DEEPSEEK_API").expect("DEEPSEEK_API is not set"),
+            std::env::var("DEEPSEEK_API_KEY").expect("DEEPSEEK_API_KEY is not set"),
             DEFAULT_BETA_BASE_URL.clone(),
         )
     }
