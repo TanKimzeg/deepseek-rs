@@ -22,6 +22,7 @@ pub(crate) struct ApiErrorEnvelope {
 }
 
 /// Categorized reqwest error kinds for diagnostics.
+#[non_exhaustive]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ReqwestErrorKind {
     Decode,
@@ -53,6 +54,7 @@ pub struct TransportError {
 }
 
 /// Unified error type for this crate.
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum DeepSeekError {
     /// API returned a structured error payload.

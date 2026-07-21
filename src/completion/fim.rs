@@ -359,8 +359,8 @@ mod tests {
             .stream(true)
             .build()
             .unwrap();
-        let mut stream = fim_request.stream_blocking().unwrap();
-        while let Some(item) = stream.next() {
+        let stream = fim_request.stream_blocking().unwrap();
+        for item in stream {
             match item {
                 Ok(chunk) => println!("Received chunk: {:#?}", chunk),
                 Err(err) => eprintln!("Stream error: {}", err),

@@ -1,3 +1,5 @@
+#![deny(unsafe_code)]
+
 //! DeepSeek API client for Rust.
 //!
 //! This crate provides:
@@ -24,11 +26,19 @@
 //! let _resp = req.send().await?;
 //! # Ok(()) }
 //! ```
-pub mod balance;
+/// Chat completions (`/chat/completions`).
+#[cfg(feature = "chat")]
 pub mod chat;
+/// Beta completions (FIM, beta chat).
+#[cfg(feature = "completion")]
 pub mod completion;
-pub mod error;
+/// Model listing (`/models`).
+#[cfg(feature = "models")]
 pub mod models;
+/// Account balance (`/user/balance`).
+#[cfg(feature = "balance")]
+pub mod balance;
+pub mod error;
 
 use crate::error::{ApiErrorEnvelope, DeepSeekError};
 
@@ -123,6 +133,7 @@ pub trait DeepSeekRequest: Sized {
     fn stream_blocking(self) -> Result<Self::BlockingStream, DeepSeekError>;
 }
 
+#[allow(dead_code)]
 async fn api_request_json<F, T>(
     method: Method,
     route: &str,
@@ -153,6 +164,7 @@ where
     serde_json::from_str::<T>(&text).map_err(|err| DeepSeekError::decode(err.to_string(), text))
 }
 
+#[allow(dead_code)]
 async fn api_request<F>(
     method: Method,
     route: &str,
@@ -178,6 +190,7 @@ where
     Ok(response)
 }
 
+#[allow(dead_code)]
 async fn api_request_stream<F>(
     method: Method,
     route: &str,
@@ -202,6 +215,8 @@ where
     Ok(stream)
 }
 
+/// Send a GET request and decode the JSON response.
+#[allow(dead_code)]
 async fn api_get<T>(route: &str, client: DeepSeekClient) -> Result<T, DeepSeekError>
 where
     T: DeserializeOwned,
@@ -209,6 +224,8 @@ where
     api_request_json(Method::GET, route, |request| request, client).await
 }
 
+/// Send a POST request with JSON body and decode the response.
+#[allow(dead_code)]
 async fn api_post<J, T>(route: &str, json: &J, client: DeepSeekClient) -> Result<T, DeepSeekError>
 where
     J: Serialize + ?Sized,
