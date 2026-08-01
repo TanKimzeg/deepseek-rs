@@ -4,8 +4,8 @@
 pub mod request {
     use crate::DeepSeekError;
     use crate::chat::request::{
-        ReasoningEffort, ResponseFormat, Stop, StreamOptions, Thinking, ToolChoice,
-        ToolType, is_none_or_empty_stop,
+        ReasoningEffort, ResponseFormat, Stop, StreamOptions, Thinking, ToolChoice, ToolType,
+        is_none_or_empty_stop,
     };
     use crate::chat::response::ToolCall;
     use crate::chat::{Chat, ChatStream, ChatStreamBlocking, ChatStreamItem, is_none_or_empty_vec};
@@ -251,14 +251,16 @@ pub mod request {
             // derive_builder + strip_option makes Option<T> fields become Option<Option<T>> here;
             // flatten() treats "unset" and "explicit None" uniformly for validation.
             if let Some(temperature) = self.temperature.flatten()
-                && !(0.0..=2.0).contains(&temperature) {
-                    return Err("temperature must be between 0 and 2".to_string());
-                }
+                && !(0.0..=2.0).contains(&temperature)
+            {
+                return Err("temperature must be between 0 and 2".to_string());
+            }
 
             if let Some(top_p) = self.top_p.flatten()
-                && !(0.0..=1.0).contains(&top_p) {
-                    return Err("top_p must be between 0 and 1".to_string());
-                }
+                && !(0.0..=1.0).contains(&top_p)
+            {
+                return Err("top_p must be between 0 and 1".to_string());
+            }
 
             if let Some(top_logprobs) = self.top_logprobs.flatten() {
                 if top_logprobs > 20 {
@@ -270,9 +272,11 @@ pub mod request {
             }
 
             if let Some(stream) = self.stream.flatten()
-                && !stream && self.stream_options.is_some() {
-                    return Err("stream_options cannot be set when stream is false".to_string());
-                }
+                && !stream
+                && self.stream_options.is_some()
+            {
+                return Err("stream_options cannot be set when stream is false".to_string());
+            }
 
             if let Some(messages) = self.messages.as_ref() {
                 messages.iter().try_for_each(|message| {
@@ -292,9 +296,10 @@ pub mod request {
 
             if let Some(stop) = self.stop.as_ref().and_then(|s| s.as_ref())
                 && let Stop::Many(values) = stop
-                    && values.len() > 16 {
-                        return Err("a maximum of 16 stop sequences are allowed".to_string());
-                    }
+                && values.len() > 16
+            {
+                return Err("a maximum of 16 stop sequences are allowed".to_string());
+            }
 
             if let Some(user_id) = self.user_id.as_ref().and_then(|u| u.as_ref()) {
                 if user_id.len() > 512 {
@@ -304,9 +309,7 @@ pub mod request {
                     .chars()
                     .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
                 {
-                    return Err(
-                        "user_id must only contain [a-zA-Z0-9\\-_]".to_string(),
-                    );
+                    return Err("user_id must only contain [a-zA-Z0-9\\-_]".to_string());
                 }
             }
 

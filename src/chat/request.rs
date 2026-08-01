@@ -21,7 +21,7 @@ pub struct ChatRequest {
     #[builder(setter(each(name = "message", into)))]
     pub messages: Vec<ChatMessage>,
 
-    /// Possible values: \`deepseek-v4-flash\`, \`deepseek-v4-pro\`
+    /// Possible values: \[`deepseek-v4-flash`, `deepseek-v4-pro`\]
     ///
     /// ID of the model to use.
     pub model: String,
