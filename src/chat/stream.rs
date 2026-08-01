@@ -1,20 +1,17 @@
-//! Chat client implementation for `/chat/completions`.
+//! Chat streaming and request implementation for `/chat/completions`.
 use crate::DeepSeekRequest;
 use crate::error::DeepSeekError;
-use crate::{api_post, api_request_stream};
+use crate::{api_post, api_request_stream, consume_sse, spawn_blocking_stream};
 
 use super::{Chat, ChatStream, request::*};
-use futures_util::StreamExt;
 use reqwest::Method;
-use reqwest_eventsource::Event;
-use std::sync::mpsc as std_mpsc;
 use tokio::sync::mpsc;
 /// Stream item produced by chat streaming.
 pub type ChatStreamItem = Result<ChatStream, DeepSeekError>;
 
 /// Blocking iterator over streaming chat chunks.
 pub struct ChatStreamBlocking {
-    pub rx: std_mpsc::Receiver<ChatStreamItem>,
+    pub rx: std::sync::mpsc::Receiver<ChatStreamItem>,
 }
 
 impl Iterator for ChatStreamBlocking {
@@ -40,7 +37,7 @@ impl DeepSeekRequest for ChatRequest {
         request.stream = Some(true);
 
         let client = request.client.clone();
-        let mut event_source = api_request_stream(
+        let event_source = api_request_stream(
             Method::POST,
             "/chat/completions",
             |builder| builder.json(&request),
@@ -48,74 +45,15 @@ impl DeepSeekRequest for ChatRequest {
         )
         .await?;
 
-        let (tx, rx) = mpsc::channel(32);
-
-        tokio::spawn(async move {
-            while let Some(event) = event_source.next().await {
-                match event {
-                    Ok(Event::Open) => {}
-                    Ok(Event::Message(message)) => {
-                        if message.data == "[DONE]" {
-                            break;
-                        }
-                        match serde_json::from_str::<ChatStream>(&message.data) {
-                            Ok(chunk) => {
-                                if tx.send(Ok(chunk)).await.is_err() {
-                                    break;
-                                }
-                            }
-                            Err(err) => {
-                                let _ = tx
-                                    .send(Err(DeepSeekError::decode(err.to_string(), message.data)))
-                                    .await;
-                                break;
-                            }
-                        }
-                    }
-                    Err(err) => {
-                        let _ = tx
-                            .send(Err(DeepSeekError::decode(err.to_string(), String::new())))
-                            .await;
-                        break;
-                    }
-                }
-            }
-        });
-
-        Ok(rx)
+        Ok(consume_sse(event_source, |data| {
+            serde_json::from_str::<ChatStream>(&data)
+                .map(Some)
+                .map_err(|err| DeepSeekError::decode(err.to_string(), data))
+        }))
     }
 
     fn stream_blocking(self) -> Result<ChatStreamBlocking, DeepSeekError> {
-        let (tx, rx) = std_mpsc::channel();
-
-        std::thread::spawn(move || {
-            let runtime = match tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-            {
-                Ok(runtime) => runtime,
-                Err(err) => {
-                    let _ = tx.send(Err(DeepSeekError::decode(err.to_string(), String::new())));
-                    return;
-                }
-            };
-
-            runtime.block_on(async move {
-                match self.stream().await {
-                    Ok(mut stream_rx) => {
-                        while let Some(item) = stream_rx.recv().await {
-                            if tx.send(item).is_err() {
-                                break;
-                            }
-                        }
-                    }
-                    Err(err) => {
-                        let _ = tx.send(Err(err));
-                    }
-                }
-            });
-        });
-
+        let rx = spawn_blocking_stream(self.stream())?;
         Ok(ChatStreamBlocking { rx })
     }
 }

@@ -5,6 +5,7 @@
 //! This crate provides:
 //! - Chat completions (`/chat/completions`)
 //! - FIM completions (beta, `/beta/completions`)
+//! - Responses API (OpenAI Responses format, `/responses`)
 //! - Model listing (`/models`)
 //! - Account balance (`/user/balance`)
 //!
@@ -26,24 +27,28 @@
 //! let _resp = req.send().await?;
 //! # Ok(()) }
 //! ```
+/// Account balance (`/user/balance`).
+#[cfg(feature = "balance")]
+pub mod balance;
 /// Chat completions (`/chat/completions`).
 #[cfg(feature = "chat")]
 pub mod chat;
 /// Beta completions (FIM, beta chat).
 #[cfg(feature = "completion")]
 pub mod completion;
+pub mod error;
 /// Model listing (`/models`).
 #[cfg(feature = "models")]
 pub mod models;
-/// Account balance (`/user/balance`).
-#[cfg(feature = "balance")]
-pub mod balance;
-pub mod error;
+/// Open AI Responses format
+#[cfg(feature = "responses")]
+pub mod responses;
 
 use crate::error::{ApiErrorEnvelope, DeepSeekError};
 
+use futures_util::StreamExt;
 use reqwest::{Client, Method, RequestBuilder, Response, header::AUTHORIZATION};
-use reqwest_eventsource::{EventSource, RequestBuilderExt};
+use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde::{Serialize, de::DeserializeOwned};
 use std::future::Future;
 use std::sync::LazyLock;
@@ -213,6 +218,107 @@ where
         .eventsource()
         .map_err(|err| DeepSeekError::decode(err.to_string(), String::new()))?;
     Ok(stream)
+}
+
+/// Consume an SSE event source, mapping each `data:` payload through `parse`.
+///
+/// `Ok(Some(item))` forwards the item downstream, `Ok(None)` ends the stream
+/// cleanly, and `Err(err)` forwards the error and ends the stream. A clean EOF
+/// (which the Responses API uses instead of a `data: [DONE]` message) is treated
+/// as normal stream termination.
+#[allow(dead_code)]
+pub(crate) fn consume_sse<T, F>(
+    mut event_source: EventSource,
+    mut parse: F,
+) -> mpsc::Receiver<Result<T, DeepSeekError>>
+where
+    T: Send + 'static,
+    F: FnMut(String) -> Result<Option<T>, DeepSeekError> + Send + 'static,
+{
+    let (tx, rx) = mpsc::channel(32);
+
+    tokio::spawn(async move {
+        while let Some(event) = event_source.next().await {
+            match event {
+                Ok(Event::Open) => {}
+                Ok(Event::Message(message)) => {
+                    if message.data == "[DONE]" {
+                        break;
+                    }
+                    match parse(message.data) {
+                        Ok(Some(item)) => {
+                            if tx.send(Ok(item)).await.is_err() {
+                                break;
+                            }
+                        }
+                        Ok(None) => break,
+                        Err(err) => {
+                            let _ = tx.send(Err(err)).await;
+                            break;
+                        }
+                    }
+                }
+                Err(err) => {
+                    if matches!(err, reqwest_eventsource::Error::StreamEnded) {
+                        break;
+                    }
+                    let _ = tx
+                        .send(Err(DeepSeekError::decode(err.to_string(), String::new())))
+                        .await;
+                    break;
+                }
+            }
+        }
+    });
+
+    rx
+}
+
+/// Drive `fut` to a stream receiver on a dedicated std thread with its own Tokio
+/// runtime, forwarding items to a blocking `std::sync::mpsc` receiver.
+///
+/// `T` is the success type of a stream item; the forwarded items are
+/// `Result<T, DeepSeekError>`.
+#[allow(dead_code)]
+pub(crate) fn spawn_blocking_stream<T>(
+    fut: impl Future<Output = Result<mpsc::Receiver<Result<T, DeepSeekError>>, DeepSeekError>>
+    + Send
+    + 'static,
+) -> Result<std::sync::mpsc::Receiver<Result<T, DeepSeekError>>, DeepSeekError>
+where
+    T: Send + 'static,
+{
+    let (tx, rx) = std::sync::mpsc::channel();
+
+    std::thread::spawn(move || {
+        let runtime = match tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+        {
+            Ok(runtime) => runtime,
+            Err(err) => {
+                let _ = tx.send(Err(DeepSeekError::decode(err.to_string(), String::new())));
+                return;
+            }
+        };
+
+        runtime.block_on(async move {
+            match fut.await {
+                Ok(mut stream_rx) => {
+                    while let Some(item) = stream_rx.recv().await {
+                        if tx.send(item).is_err() {
+                            break;
+                        }
+                    }
+                }
+                Err(err) => {
+                    let _ = tx.send(Err(err));
+                }
+            }
+        });
+    });
+
+    Ok(rx)
 }
 
 /// Send a GET request and decode the JSON response.

@@ -1,15 +1,15 @@
 //! Chat completion request/response models.
 //!
 //! This module contains the data structures for the `/chat/completions` API
-//! and re-exports streaming helpers from the client implementation.
+//! and re-exports streaming helpers from the request implementation.
 use crate::DeepSeekClient;
 use serde::{Deserialize, Serialize};
 
-pub mod client;
 pub mod request;
 pub mod response;
+pub mod stream;
 
-pub use client::{ChatStreamBlocking, ChatStreamItem};
+pub use stream::{ChatStreamBlocking, ChatStreamItem};
 
 /// Helper to skip serialization of empty `Vec` fields wrapped in `Option`.
 pub(crate) fn is_none_or_empty_vec<T>(opt: &Option<Vec<T>>) -> bool {

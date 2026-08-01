@@ -3,17 +3,14 @@
 //! This endpoint is beta and requires the beta base URL:
 //! `https://api.deepseek.com/beta`.
 use std::collections::HashMap;
-use std::sync::mpsc as std_mpsc;
 
+use crate::DeepSeekRequest;
 use crate::chat::request::{Stop, StreamOptions, is_none_or_empty_stop};
 use crate::chat::response::ChatGeneric;
 use crate::error::DeepSeekError;
-use crate::{DeepSeekClient, api_request_stream};
-use crate::{DeepSeekRequest, api_post};
+use crate::{DeepSeekClient, api_post, api_request_stream, consume_sse, spawn_blocking_stream};
 use derive_builder::Builder;
-use futures_util::StreamExt;
 use reqwest::Method;
-use reqwest_eventsource::Event;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
@@ -109,29 +106,35 @@ pub struct FIMCompletionRequest {
 impl FIMCompletionRequestBuilder {
     fn validate(&self) -> Result<(), String> {
         if let Some(temperature) = self.temperature.flatten()
-            && !(0.0..=2.0).contains(&temperature) {
-                return Err("temperature must be between 0 and 2".to_string());
-            }
+            && !(0.0..=2.0).contains(&temperature)
+        {
+            return Err("temperature must be between 0 and 2".to_string());
+        }
         if let Some(logprobs) = self.logprobs.flatten()
-            && logprobs > 20 {
-                return Err("logprobs must be <= 20".to_string());
-            }
+            && logprobs > 20
+        {
+            return Err("logprobs must be <= 20".to_string());
+        }
 
         if let Some(top_p) = self.top_p.flatten()
-            && !(0.0..=1.0).contains(&top_p) {
-                return Err("top_p must be between 0 and 1".to_string());
-            }
+            && !(0.0..=1.0).contains(&top_p)
+        {
+            return Err("top_p must be between 0 and 1".to_string());
+        }
 
         if let Some(stream) = self.stream.flatten()
-            && !stream && self.stream_options.is_some() {
-                return Err("stream_options cannot be set when stream is false".to_string());
-            }
+            && !stream
+            && self.stream_options.is_some()
+        {
+            return Err("stream_options cannot be set when stream is false".to_string());
+        }
 
         if let Some(stop) = self.stop.as_ref().and_then(|s| s.as_ref())
             && let Stop::Many(values) = stop
-                && values.len() > 16 {
-                    return Err("a maximum of 16 stop sequences are allowed".to_string());
-                }
+            && values.len() > 16
+        {
+            return Err("a maximum of 16 stop sequences are allowed".to_string());
+        }
 
         Ok(())
     }
@@ -187,7 +190,7 @@ pub type CompletionStream = ChatGeneric<CompletionChoiceStream>;
 pub type CompletionStreamItem = Result<CompletionStream, DeepSeekError>;
 /// Blocking iterator over FIM completion streaming chunks.
 pub struct CompletionStreamBlocking {
-    rx: std_mpsc::Receiver<CompletionStreamItem>,
+    rx: std::sync::mpsc::Receiver<CompletionStreamItem>,
 }
 
 impl Iterator for CompletionStreamBlocking {
@@ -212,7 +215,7 @@ impl DeepSeekRequest for FIMCompletionRequest {
         request.stream = Some(true);
 
         let client = request.client.clone();
-        let mut event_source = api_request_stream(
+        let event_source = api_request_stream(
             Method::POST,
             "/completions",
             |builder| builder.json(&request),
@@ -220,74 +223,15 @@ impl DeepSeekRequest for FIMCompletionRequest {
         )
         .await?;
 
-        let (tx, rx) = mpsc::channel(32);
-
-        tokio::spawn(async move {
-            while let Some(event) = event_source.next().await {
-                match event {
-                    Ok(Event::Open) => {}
-                    Ok(Event::Message(message)) => {
-                        if message.data == "[DONE]" {
-                            break;
-                        }
-                        match serde_json::from_str::<CompletionStream>(&message.data) {
-                            Ok(chunk) => {
-                                if tx.send(Ok(chunk)).await.is_err() {
-                                    break;
-                                }
-                            }
-                            Err(err) => {
-                                let _ = tx
-                                    .send(Err(DeepSeekError::decode(err.to_string(), message.data)))
-                                    .await;
-                                break;
-                            }
-                        }
-                    }
-                    Err(err) => {
-                        let _ = tx
-                            .send(Err(DeepSeekError::decode(err.to_string(), String::new())))
-                            .await;
-                        break;
-                    }
-                }
-            }
-        });
-
-        Ok(rx)
+        Ok(consume_sse(event_source, |data| {
+            serde_json::from_str::<CompletionStream>(&data)
+                .map(Some)
+                .map_err(|err| DeepSeekError::decode(err.to_string(), data))
+        }))
     }
 
     fn stream_blocking(self) -> Result<CompletionStreamBlocking, DeepSeekError> {
-        let (tx, rx) = std_mpsc::channel();
-
-        std::thread::spawn(move || {
-            let runtime = match tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-            {
-                Ok(runtime) => runtime,
-                Err(err) => {
-                    let _ = tx.send(Err(DeepSeekError::decode(err.to_string(), String::new())));
-                    return;
-                }
-            };
-
-            runtime.block_on(async move {
-                match self.stream().await {
-                    Ok(mut stream_rx) => {
-                        while let Some(item) = stream_rx.recv().await {
-                            if tx.send(item).is_err() {
-                                break;
-                            }
-                        }
-                    }
-                    Err(err) => {
-                        let _ = tx.send(Err(err));
-                    }
-                }
-            });
-        });
-
+        let rx = spawn_blocking_stream(self.stream())?;
         Ok(CompletionStreamBlocking { rx })
     }
 }
