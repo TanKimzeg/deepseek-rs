@@ -21,7 +21,7 @@ pub struct ChatRequest {
     #[builder(setter(each(name = "message", into)))]
     pub messages: Vec<ChatMessage>,
 
-    /// Possible values: \[`deepseek-v4-flash`, `deepseek-v4-pro`\]
+    /// Possible values: \[`deepseek-v4-flash`, `deepseek-v4-pro`, `deepseek-v4-flash-vision-exp`\]
     ///
     /// ID of the model to use.
     pub model: String,
@@ -157,8 +157,9 @@ pub enum ChatMessage {
         name: Option<String>,
     },
     User {
-        /// The contents of the user message.
-        content: String,
+        /// The contents of the user message. Either a plain string, or an array of content parts
+        /// (for image input with the `deepseek-v4-flash-vision-exp` model).
+        content: UserContent,
         /// An optional name for the participant. Provides the model information to differentiate between participants of the same role.
         #[serde(skip_serializing_if = "Option::is_none")]
         name: Option<String>,
@@ -181,6 +182,169 @@ pub enum ChatMessage {
         tool_call_id: String,
     },
 }
+
+/// Content of a user message.
+///
+/// Either a plain string or an array of content parts (for multimodal input).
+#[non_exhaustive]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum UserContent {
+    /// Plain text content.
+    Text(String),
+    /// Array of content parts (text, image, file).
+    Parts(Vec<UserContentPart>),
+}
+
+impl UserContent {
+    /// Create a plain text content.
+    pub fn text(s: impl Into<String>) -> Self {
+        UserContent::Text(s.into())
+    }
+
+    /// Create content from a list of parts.
+    pub fn parts(parts: Vec<UserContentPart>) -> Self {
+        UserContent::Parts(parts)
+    }
+
+    /// Create content with a single image URL.
+    pub fn image_url(url: impl Into<String>) -> Self {
+        UserContent::Parts(vec![UserContentPart::image_url(url)])
+    }
+
+    /// Create content with a single image URL and detail level.
+    pub fn image_url_with_detail(url: impl Into<String>, detail: ImageDetail) -> Self {
+        UserContent::Parts(vec![UserContentPart::image_url_with_detail(url, detail)])
+    }
+
+    /// Create content referencing an uploaded file by ID.
+    pub fn file_id(id: impl Into<String>) -> Self {
+        UserContent::Parts(vec![UserContentPart::file_id(id)])
+    }
+
+    /// Create content with an inline base64 image.
+    pub fn file_data(data: impl Into<String>, filename: impl Into<String>) -> Self {
+        UserContent::Parts(vec![UserContentPart::file_data(data, filename)])
+    }
+}
+
+impl From<String> for UserContent {
+    fn from(s: String) -> Self {
+        UserContent::Text(s)
+    }
+}
+
+impl From<&str> for UserContent {
+    fn from(s: &str) -> Self {
+        UserContent::Text(s.to_string())
+    }
+}
+
+impl From<Vec<UserContentPart>> for UserContent {
+    fn from(parts: Vec<UserContentPart>) -> Self {
+        UserContent::Parts(parts)
+    }
+}
+
+/// A content part within a multimodal user message.
+#[non_exhaustive]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum UserContentPart {
+    /// Text content part.
+    Text {
+        /// The text content.
+        text: String,
+    },
+    /// Image content part (URL or base64).
+    ImageUrl {
+        /// Image URL details.
+        image_url: ImageUrlDetail,
+    },
+    /// File content part (uploaded file ID or inline base64).
+    File {
+        /// The ID of a file uploaded via the Files API.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        file_id: Option<String>,
+        /// A base64-encoded data URL of the image.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        file_data: Option<String>,
+        /// An optional filename (only valid with `file_data`).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        filename: Option<String>,
+    },
+}
+
+impl UserContentPart {
+    /// Create a text content part.
+    pub fn text(s: impl Into<String>) -> Self {
+        UserContentPart::Text { text: s.into() }
+    }
+
+    /// Create an image URL content part.
+    pub fn image_url(url: impl Into<String>) -> Self {
+        UserContentPart::ImageUrl {
+            image_url: ImageUrlDetail {
+                url: url.into(),
+                detail: None,
+            },
+        }
+    }
+
+    /// Create an image URL content part with detail level.
+    pub fn image_url_with_detail(url: impl Into<String>, detail: ImageDetail) -> Self {
+        UserContentPart::ImageUrl {
+            image_url: ImageUrlDetail {
+                url: url.into(),
+                detail: Some(detail),
+            },
+        }
+    }
+
+    /// Create a file content part referencing an uploaded file.
+    pub fn file_id(id: impl Into<String>) -> Self {
+        UserContentPart::File {
+            file_id: Some(id.into()),
+            file_data: None,
+            filename: None,
+        }
+    }
+
+    /// Create a file content part with inline base64 data.
+    pub fn file_data(data: impl Into<String>, filename: impl Into<String>) -> Self {
+        UserContentPart::File {
+            file_id: None,
+            file_data: Some(data.into()),
+            filename: Some(filename.into()),
+        }
+    }
+}
+
+/// Image URL detail for vision requests.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub struct ImageUrlDetail {
+    /// The image URL (http(s) URL or base64 data URL).
+    pub url: String,
+    /// Controls how the image is processed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<ImageDetail>,
+}
+
+/// Image detail level.
+#[non_exhaustive]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ImageDetail {
+    /// Downscale to 512x512 (faster, cheaper).
+    Low,
+    /// Process at high resolution with image tiling (slower, more detail).
+    High,
+    /// Use the original resolution without downscaling.
+    Original,
+    /// Let the model choose the processing level.
+    Auto,
+}
+
 /// Reasoning effort hints for the model.
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]

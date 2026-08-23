@@ -97,7 +97,7 @@ mod tests {
             ChatRequestBuilder::default()
                 .model("deepseek-v4-pro")
                 .message(ChatMessage::User {
-                    content: "Hi".to_string(),
+                    content: "Hi".into(),
                     name: None,
                 })
         }
@@ -125,7 +125,7 @@ mod tests {
             .client(DeepSeekClient::new("sk-...", DEFAULT_BASE_URL.clone()))
             .model("deepseek-v4-flash")
             .message(ChatMessage::User {
-                content: "Hi".to_string(),
+                content: "Hi".into(),
                 name: None,
             })
             .thinking(thinking)
@@ -133,5 +133,196 @@ mod tests {
             .build();
         // API no longer rejects reasoning_effort with disabled thinking
         assert!(req.is_ok());
+    }
+
+    #[test]
+    fn user_content_text_serializes_as_string() {
+        let content = UserContent::Text("Hello".to_string());
+        let value = serde_json::to_value(&content).unwrap();
+        assert_eq!(value, json!("Hello"));
+    }
+
+    #[test]
+    fn user_content_parts_serializes_as_array() {
+        let content = UserContent::Parts(vec![
+            UserContentPart::text("What is in this image?"),
+            UserContentPart::file_id("file-api-abc123"),
+        ]);
+        let value = serde_json::to_value(&content).unwrap();
+        assert_eq!(
+            value,
+            json!([
+                {"type": "text", "text": "What is in this image?"},
+                {"type": "file", "file_id": "file-api-abc123"}
+            ])
+        );
+    }
+
+    #[test]
+    fn user_content_image_url_serializes() {
+        let content = UserContent::image_url("https://example.com/image.jpg");
+        let value = serde_json::to_value(&content).unwrap();
+        assert_eq!(
+            value,
+            json!([
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://example.com/image.jpg"}
+                }
+            ])
+        );
+    }
+
+    #[test]
+    fn user_content_image_url_with_detail_serializes() {
+        let content =
+            UserContent::image_url_with_detail("https://example.com/img.png", ImageDetail::Low);
+        let value = serde_json::to_value(&content).unwrap();
+        assert_eq!(
+            value,
+            json!([
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://example.com/img.png", "detail": "low"}
+                }
+            ])
+        );
+    }
+
+    #[test]
+    fn user_content_file_data_serializes() {
+        let content = UserContent::file_data("data:image/jpeg;base64,abc123", "photo.jpg");
+        let value = serde_json::to_value(&content).unwrap();
+        assert_eq!(
+            value,
+            json!([
+                {
+                    "type": "file",
+                    "file_data": "data:image/jpeg;base64,abc123",
+                    "filename": "photo.jpg"
+                }
+            ])
+        );
+    }
+
+    #[test]
+    fn user_content_from_str_into() {
+        let content: UserContent = "Hello".into();
+        let value = serde_json::to_value(&content).unwrap();
+        assert_eq!(value, json!("Hello"));
+    }
+
+    #[test]
+    fn user_content_from_string_into() {
+        let content: UserContent = "Hello".to_string().into();
+        let value = serde_json::to_value(&content).unwrap();
+        assert_eq!(value, json!("Hello"));
+    }
+
+    #[test]
+    fn user_content_from_vec_parts_into() {
+        let parts = vec![
+            UserContentPart::text("Hi"),
+            UserContentPart::file_id("file-xxx"),
+        ];
+        let content: UserContent = parts.into();
+        let value = serde_json::to_value(&content).unwrap();
+        assert!(value.is_array());
+    }
+
+    #[test]
+    fn chat_message_user_with_text_content() {
+        let msg = ChatMessage::User {
+            content: "Hello".into(),
+            name: None,
+        };
+        let value = serde_json::to_value(&msg).unwrap();
+        assert_eq!(value.get("role"), Some(&json!("user")));
+        assert_eq!(value.get("content"), Some(&json!("Hello")));
+    }
+
+    #[test]
+    fn chat_message_user_with_multimodal_content() {
+        let msg = ChatMessage::User {
+            content: UserContent::Parts(vec![
+                UserContentPart::text("Describe this image"),
+                UserContentPart::image_url("https://example.com/img.jpg"),
+            ]),
+            name: None,
+        };
+        let value = serde_json::to_value(&msg).unwrap();
+        assert_eq!(value.get("role"), Some(&json!("user")));
+        assert!(value.get("content").unwrap().is_array());
+        let content = value.get("content").unwrap().as_array().unwrap();
+        assert_eq!(content.len(), 2);
+        assert_eq!(content[0]["type"], json!("text"));
+        assert_eq!(content[1]["type"], json!("image_url"));
+    }
+
+    #[test]
+    fn user_content_deserializes_from_string() {
+        let content: UserContent = serde_json::from_value(json!("Hello")).unwrap();
+        assert_eq!(content, UserContent::Text("Hello".to_string()));
+    }
+
+    #[test]
+    fn user_content_part_file_with_id_deserializes() {
+        let part: UserContentPart =
+            serde_json::from_value(json!({"type": "file", "file_id": "file-api-abc123"})).unwrap();
+        assert_eq!(part, UserContentPart::file_id("file-api-abc123"));
+    }
+
+    #[test]
+    fn user_content_part_file_with_data_and_filename_deserializes() {
+        let part: UserContentPart = serde_json::from_value(json!({
+            "type": "file",
+            "file_data": "data:image/jpeg;base64,abc123",
+            "filename": "photo.jpg"
+        }))
+        .unwrap();
+        assert_eq!(
+            part,
+            UserContentPart::file_data("data:image/jpeg;base64,abc123", "photo.jpg")
+        );
+    }
+
+    #[test]
+    fn user_content_part_image_url_without_detail_deserializes() {
+        let part: UserContentPart = serde_json::from_value(json!({
+            "type": "image_url",
+            "image_url": {"url": "https://example.com/img.png"}
+        }))
+        .unwrap();
+        assert_eq!(
+            part,
+            UserContentPart::image_url("https://example.com/img.png")
+        );
+    }
+
+    #[test]
+    fn chat_message_user_multimodal_round_trips() {
+        let msg = ChatMessage::User {
+            content: UserContent::Parts(vec![
+                UserContentPart::text("What is in this image?"),
+                UserContentPart::file_id("file-api-abc123"),
+            ]),
+            name: None,
+        };
+        let value = serde_json::to_value(&msg).unwrap();
+        let back: ChatMessage = serde_json::from_value(value).unwrap();
+        assert_eq!(back, msg);
+    }
+
+    #[test]
+    fn chat_message_user_with_file_id_content() {
+        let msg = ChatMessage::User {
+            content: UserContent::file_id("file-api-abc123"),
+            name: None,
+        };
+        let value = serde_json::to_value(&msg).unwrap();
+        assert_eq!(value.get("role"), Some(&json!("user")));
+        let content = value.get("content").unwrap().as_array().unwrap();
+        assert_eq!(content[0]["type"], json!("file"));
+        assert_eq!(content[0]["file_id"], json!("file-api-abc123"));
     }
 }

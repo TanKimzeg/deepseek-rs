@@ -81,7 +81,7 @@ mod tests {
     async fn chat() {
         let req = get_builder()
             .message(ChatMessage::User {
-                content: "Hi".to_string(),
+                content: "Hi".into(),
                 name: None,
             })
             .max_tokens(5_u32)
@@ -99,7 +99,7 @@ mod tests {
         let req = get_builder()
             .model("invalid-model-name")
             .message(ChatMessage::User {
-                content: "Hi".to_string(),
+                content: "Hi".into(),
                 name: None,
             })
             .build()
@@ -127,7 +127,7 @@ mod tests {
     #[tokio::test]
     async fn chat_tool_call() {
         let mut messages = vec![ChatMessage::User {
-            content: "How's the weather in Hangzhou, Zhejiang?".to_string(),
+            content: "How's the weather in Hangzhou, Zhejiang?".into(),
             name: None,
         }];
         let req_tool = Tool::new(
@@ -185,7 +185,7 @@ mod tests {
     async fn chat_stream_async() {
         let req = get_builder()
             .message(ChatMessage::User {
-                content: "Hi".to_string(),
+                content: "Hi".into(),
                 name: None,
             })
             .max_tokens(16_u32)
@@ -205,7 +205,7 @@ mod tests {
     fn chat_stream_blocking() {
         let req = get_builder()
             .message(ChatMessage::User {
-                content: "Hi".to_string(),
+                content: "Hi".into(),
                 name: None,
             })
             .max_tokens(16_u32)
