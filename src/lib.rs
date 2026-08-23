@@ -8,6 +8,7 @@
 //! - Responses API (OpenAI Responses format, `/responses`)
 //! - Model listing (`/models`)
 //! - Account balance (`/user/balance`)
+//! - Files API (`/files`) for uploading and managing images
 //!
 //! Streaming is supported in both async and blocking forms. The async API returns
 //! a `tokio::mpsc::Receiver`, while the blocking API returns an iterator that
@@ -37,6 +38,9 @@ pub mod chat;
 #[cfg(feature = "completion")]
 pub mod completion;
 pub mod error;
+/// Files API (`/files`) for uploading and managing images.
+#[cfg(feature = "files")]
+pub mod files;
 /// Model listing (`/models`).
 #[cfg(feature = "models")]
 pub mod models;
@@ -338,4 +342,32 @@ where
     T: DeserializeOwned,
 {
     api_request_json(Method::POST, route, |request| request.json(json), client).await
+}
+
+/// Send a DELETE request and decode the JSON response.
+#[allow(dead_code)]
+async fn api_delete<T>(route: &str, client: DeepSeekClient) -> Result<T, DeepSeekError>
+where
+    T: DeserializeOwned,
+{
+    api_request_json(Method::DELETE, route, |request| request, client).await
+}
+
+/// Send a POST request with multipart form body and decode the JSON response.
+#[allow(dead_code)]
+async fn api_post_multipart<T>(
+    route: &str,
+    form: reqwest::multipart::Form,
+    client: DeepSeekClient,
+) -> Result<T, DeepSeekError>
+where
+    T: DeserializeOwned,
+{
+    api_request_json(
+        Method::POST,
+        route,
+        |request| request.multipart(form),
+        client,
+    )
+    .await
 }
