@@ -72,6 +72,8 @@ pub enum DeepSeekError {
     },
     /// Transport errors from reqwest.
     Transport(TransportError),
+    /// Local filesystem error (e.g. reading a file to upload).
+    Io(std::io::Error),
 }
 
 impl DeepSeekError {
@@ -119,6 +121,7 @@ impl fmt::Display for DeepSeekError {
                     write!(f, "reqwest error: {}", transport.source)
                 }
             }
+            DeepSeekError::Io(source) => write!(f, "IO error: {source}"),
         }
     }
 }
@@ -127,6 +130,7 @@ impl Error for DeepSeekError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             DeepSeekError::Transport(transport) => Some(&transport.source),
+            DeepSeekError::Io(source) => Some(source),
             _ => None,
         }
     }
@@ -154,5 +158,11 @@ impl From<reqwest::Error> for DeepSeekError {
             source: value,
             kind,
         })
+    }
+}
+
+impl From<std::io::Error> for DeepSeekError {
+    fn from(source: std::io::Error) -> Self {
+        DeepSeekError::Io(source)
     }
 }
